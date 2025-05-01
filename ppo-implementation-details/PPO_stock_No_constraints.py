@@ -20,9 +20,9 @@ from gymnasium.envs.registration import register
 
 register(
     id="PortfolioEnv-v0",
-    entry_point="portfolio:PortfolioEnv",  # Corrected entry point
+    entry_point="portfolio:PortfolioEnv",
 )
-import gymnasium as gym  # Ensure using Gymnasium library
+import gymnasium as gym
 import os
 os.environ["WANDB_DISABLE_GYM"] = "true"
 
@@ -133,7 +133,7 @@ class Agent(nn.Module):
         dist = torch.distributions.Normal(mu, std)
 
         if action is None:
-            raw_action = dist.rsample()  # rsample = differentiable sampling
+            raw_action = dist.rsample()
             log_prob = dist.log_prob(raw_action).sum(-1)
             entropy = dist.entropy().sum(-1)
 
@@ -155,7 +155,7 @@ class Agent(nn.Module):
         Accepts a tensor of shape [batch_size, num_assets] or [num_assets].
         """
         if action.dim() == 1:
-            action = action.unsqueeze(0)  # make it (1, num_assets)
+            action = action.unsqueeze(0)
 
         constrained = []
 
@@ -167,18 +167,18 @@ class Agent(nn.Module):
             nonzero_count = (act > 1e-5).sum().item()
 
             if nonzero_count < self.min_cardinality:
-                # Too sparse → keep top min_cardinality assets
+                #keep top min_cardinality assets
                 selected_indices = sorted_indices[:self.min_cardinality]
             elif nonzero_count > self.max_cardinality:
-                # Too dense → keep only top max_cardinality assets
+                # keep only top max_cardinality assets
                 selected_indices = sorted_indices[:self.max_cardinality]
             else:
-                # Within bounds → keep only the non-zero ones
+                # keep only the non-zero ones
                 selected_indices = (act > 1e-5).nonzero(as_tuple=True)[0]
 
             new_act = torch.zeros_like(act)
             new_act[selected_indices] = act[selected_indices]
-            new_act = new_act / (new_act.sum() + 1e-8)  # Normalize safely
+            new_act = new_act / (new_act.sum() + 1e-8)
 
             constrained.append(new_act)
 
@@ -245,7 +245,7 @@ def make_env(gym_id, seed, idx, capture_video, run_name, price_data):
             env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
 
         # Debugging: Print type of env to check if it's a valid gym.Env
-        print(f"Created environment: {type(env)}")  # Should print <class 'gym.Env'>
+        print(f"Created environment: {type(env)}")
 
         # Set the seed for reproducibility
         env.reset(seed=seed)
@@ -294,7 +294,7 @@ if __name__ == "__main__":
     # Generate run_name from arguments
     run_name = f"{args.gym_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
-    if args.track:  # This should be True, not False
+    if args.track:
         import wandb
 
         wandb.init(
@@ -303,7 +303,7 @@ if __name__ == "__main__":
             sync_tensorboard=True,
             config=vars(args),
             name=run_name,
-            monitor_gym=False,  # change this to False
+            monitor_gym=False,
             save_code=True,
         )
 
@@ -384,13 +384,13 @@ if __name__ == "__main__":
 
             rewards[step] = torch.tensor(reward).to(device).view(-1)
 
-            # Track portfolio return by accumulating the reward (assuming reward is portfolio return per step)
+            # Track portfolio return by accumulating the reward
             portfolio_return += reward  # Sum up the portfolio returns
 
             next_obs = torch.tensor(next_obs_np, dtype=torch.float32).to(device)
             next_done = torch.tensor(done, dtype=torch.float32).to(device)
 
-            # Track episodic return (useful for logging or monitoring)
+            # Track episodic return
             for item in info:
                 if "episode" in item:
                     episode_indices = np.where(info['episode']['_r'] == True)[0][0]
@@ -412,7 +412,7 @@ if __name__ == "__main__":
 
                     break
 
-        # bootstrap value if not done
+        # bootstrap value
         with torch.no_grad():
             next_value = agent.get_value(next_obs).reshape(1, -1)
             if args.gae:
@@ -462,7 +462,6 @@ if __name__ == "__main__":
                 ratio = logratio.exp()
 
                 with torch.no_grad():
-                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
                     old_approx_kl = (-logratio).mean()
                     approx_kl = ((ratio - 1) - logratio).mean()
                     clipfracs += [((ratio - 1.0).abs() > args.clip_coef).float().mean().item()]
@@ -522,7 +521,7 @@ if __name__ == "__main__":
     # Save model
     # torch.save(agent.state_dict(), "ppo_portfolio_agent_stocks_no_contraints.pt")
 
-    # Recreate environment for evaluation (no wrappers if you want full control)
+    # Recreate environment for evaluation
     eval_env = PortfolioEnv(price_data=price_data)
     agent.load_state_dict(torch.load("ppo_portfolio_agent_stocks_no_contraints.pt", map_location=device))
 
@@ -530,7 +529,7 @@ if __name__ == "__main__":
     evaluate(agent, eval_env, device, episodes=20, render=False)
 
 
-    # === Evaluate a fixed equally weighted portfolio (25% per asset) ===
+    # === Evaluate a fixed equally weighted portfolio (2% per asset) ===
     fixed_weights = np.array([1/50] * eval_env.n_assets)
     print(eval_env.n_assets)
     fixed_portfolio_value = eval_env.initial_value
@@ -549,7 +548,7 @@ if __name__ == "__main__":
 
         # Save weights
         weights = action.cpu().numpy().flatten()
-        weights = weights / (np.sum(weights) + 1e-8)  # normalize, just in case
+        weights = weights / (np.sum(weights) + 1e-8)
         ppo_weights.append(weights)
 
         # Get price relatives
@@ -566,13 +565,13 @@ if __name__ == "__main__":
 
         ppo_portfolio_values.append(ppo_value)
 
-        # Step env to update observation (but ignore rewards)
+        # Step env to update observation
         obs, _, done, _, _ = eval_env.step(weights)
 
-    # Create fixed portfolio value over time (same range as PPO)
+    # Create fixed portfolio value over time
     fixed_portfolio_values = []
     fixed_value = eval_env.initial_value
-    for t in range(eval_env.max_steps - 1):  # Use eval_env.max_steps - 1
+    for t in range(eval_env.max_steps - 1):
         prev_prices = eval_env.price_data.iloc[t]
         curr_prices = eval_env.price_data.iloc[t + 1]
         price_relatives = curr_prices / prev_prices
@@ -643,14 +642,14 @@ if __name__ == "__main__":
     data.to_csv("test_stock_prices_2024.csv", index=False)
     price_data = pd.read_csv("test_stock_prices_2024.csv")
     price_data = price_data.drop(columns="Date")
-    # Recreate environment for evaluation (no wrappers if you want full control)
+    # Recreate environment for evaluation
     eval_env = PortfolioEnv(price_data=price_data)
     agent.load_state_dict(torch.load("ppo_portfolio_agent_stocks_no_contraints.pt", map_location=device))
 
     # Evaluate the trained agent
     evaluate(agent, eval_env, device, episodes=20, render=False)
 
-    # === Evaluate a fixed equally weighted portfolio (25% per asset) ===
+    # === Evaluate a fixed equally weighted portfolio (2% per asset) ===
     fixed_weights = np.array([1 / 50] * eval_env.n_assets)
     print(eval_env.n_assets)
     fixed_portfolio_value = eval_env.initial_value
@@ -669,7 +668,7 @@ if __name__ == "__main__":
 
         # Save weights
         weights = action.cpu().numpy().flatten()
-        weights = weights / (np.sum(weights) + 1e-8)  # normalize, just in case
+        weights = weights / (np.sum(weights) + 1e-8)
         ppo_weights.append(weights)
 
         # Get price relatives
@@ -686,13 +685,13 @@ if __name__ == "__main__":
 
         ppo_portfolio_values.append(ppo_value)
 
-        # Step env to update observation (but ignore rewards)
+        # Step env to update observation
         obs, _, done, _, _ = eval_env.step(weights)
 
-    # Create fixed portfolio value over time (same range as PPO)
+    # Create fixed portfolio value over time
     fixed_portfolio_values = []
     fixed_value = eval_env.initial_value
-    for t in range(eval_env.max_steps - 1):  # Use eval_env.max_steps - 1
+    for t in range(eval_env.max_steps - 1):
         prev_prices = eval_env.price_data.iloc[t]
         curr_prices = eval_env.price_data.iloc[t + 1]
         price_relatives = curr_prices / prev_prices

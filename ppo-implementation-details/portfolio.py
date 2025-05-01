@@ -17,7 +17,7 @@ class PortfolioEnv(gym.Env):
         self.portfolio_value = self.initial_value
 
     def reset(self, seed=None, return_info=False, options=None):
-        self.current_step = 1  # Start at step 1 so we can look back at t-1
+        self.current_step = 1
         self.portfolio_value = self.initial_value
         obs = self._get_obs()
         return obs, {}
@@ -39,7 +39,7 @@ class PortfolioEnv(gym.Env):
         portfolio_return = np.dot(action, price_relatives)
         self.portfolio_value *= portfolio_return
 
-        # Reward = log return (common for numerical stability)
+        # Reward = log return
         epsilon = 1e-8
         reward = np.log(np.maximum(portfolio_return, epsilon))
 
